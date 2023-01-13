@@ -1,564 +1,422 @@
-import NemAll_Python_Geometry as AllplanGeo
-import NemAll_Python_BaseElements as AllplanBaseElements
-import NemAll_Python_BasisElements as AllplanBasisElements
-import NemAll_Python_Utility as AllplanUtil
-import GeometryValidate as GeometryValidate
+import NemAll_Python_Geometry as geometry
+import NemAll_Python_BaseElements as baseElements
+import NemAll_Python_BasisElements as basisElements
+import NemAll_Python_Utility as utility
+import geometryValidate as geometryValidate
 from HandleDirection import HandleDirection
 from HandleProperties import HandleProperties
 
+def create_el(build_ele, doc):
+    element = balka(doc)
+    return element.create(build_ele)
 
 def check_allplan_version(build_ele, version):
     del build_ele
     del version
     return True
 
+def move_handle(build_ele, handle_prop, input_pnt, doc):
+    build_ele.change_property(handle_prop, input_pnt)
+    return create_el(build_ele, doc)
 
-def create_element(build_ele, doc):
-    element = Beam(doc)
-    return element.create(build_ele)
+class balka:
 
+    def create(self, build_ele):
+        self.top(build_ele)
+        self.handle(build_ele)
+        return (self.model_ele_list, self.handle_list)
 
-class Beam:
     def __init__(self, doc):
         self.model_ele_list = []
         self.handle_list = []
         self.document = doc
 
-    def create(self, build_ele):
-        self.connect_all_parts(build_ele)
-        self.create_lower_part_beam(build_ele)
-        return (self.model_ele_list, self.handle_list)
-
-    def connect_all_parts(self, build_ele):
-        com_prop = AllplanBaseElements.CommonProperties()
+    def top(self, build_ele):
+        com_prop = baseElements.CommonProperties()
         com_prop.GetGlobalProperties()
-        com_prop.Pen = 1
-        com_prop.Color = 3
-        com_prop.Stroke = 1
-        polyhedron_bottom = self.create_lower_part_beam(build_ele)
-        polyhedron_center = self.create_central_part_beam(build_ele)
-        polyhedron_top = self.create_top_part_beam(build_ele)
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron_bottom, polyhedron_center)
+        com_prop.pen = 1
+        com_prop.color = 3
+        com_prop.stroke = 1
+        polyhedron_bottom = self.handle(build_ele)
+        polyhedron_center = self.center(build_ele)
+        polyhedron_top = self.top_part(build_ele)
+        err, polyhedron = geometry.union(polyhedron_bottom, polyhedron_center)
         if err:
             return
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, polyhedron_top)
+        err, polyhedron = geometry.union(polyhedron, polyhedron_top)
         if err:
             return 
         self.model_ele_list.append(
-            AllplanBasisElements.ModelElement3D(com_prop, polyhedron))
+            basisElements.Modelelem(com_prop, polyhedron))
 
-    def create_lower_part_beam(self, build_ele):
-        polyhedron = self.lower_part_addiction_1(build_ele)
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_4(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_2_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_3_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_4_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_2_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_3_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_2_4(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.lower_part_addiction_3_4(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.last_lower_part(build_ele))
-        return polyhedron
-
-    def create_central_part_beam(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(0, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value, 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 
-                                        build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - (build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value), 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 
-                                        build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value,
-                                         build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, 
-                                         build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value,
-                                        build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 
-                                        build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value,
-                                        build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 
-                                        build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value,
-                                        build_ele.LengthBottomCut.value, 
-                                        build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(0, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(0, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
+    def center(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(0, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(0, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - (build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value),  build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(0, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(0, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(0, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def create_top_part_beam(self, build_ele):
-        polyhedron = self.top_part_addiction_1(build_ele)
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_3(build_ele, plus=(build_ele.Length.value - build_ele.LengthCenterWidth.value)))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_4(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_2_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_4(build_ele, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2, build_ele.WidthTop.value, 10))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_2_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_4_2(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_4_2(build_ele, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2, build_ele.WidthTop.value, 10))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.top_part_addiction_3_3(build_ele))
-        err, polyhedron = AllplanGeo.MakeUnion(polyhedron, self.last_top_part(build_ele))
+    def handle(self, build_ele):
+        polyhedron = self.low_part1(build_ele)
+        err, polyhedron = geometry.union(polyhedron, self.low_part2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part4(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part2_2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part3_2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part4_2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part2_3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part3_3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part2_4(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part3_4(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.low_part5(build_ele))
         return polyhedron
 
-    def top_part_addiction_1(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, 
-                                        build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                        build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
+    def top_part(self, build_ele):
+        polyhedron = self.top_part1(build_ele)
+        err, polyhedron = geometry.union(polyhedron, self.top_part3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part3(build_ele, plus=(build_ele.length.value - build_ele.lengthcentrwidth.value)))
+        err, polyhedron = geometry.union(polyhedron, self.top_part4(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part2_2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part4(build_ele, build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2, build_ele.widthTop.value, 10))
+        err, polyhedron = geometry.union(polyhedron, self.top_part2_3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part4_2(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part4_2(build_ele, build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2, build_ele.widthTop.value, 10))
+        err, polyhedron = geometry.union(polyhedron, self.top_part3_3(build_ele))
+        err, polyhedron = geometry.union(polyhedron, self.top_part5(build_ele))
+        return polyhedron
 
+    def top_part1(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2,build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2,build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2,build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2,build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 , build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 , build_ele.WidthBottom.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value + 10, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value + build_ele.HeightCenter.value + 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 , build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 , build_ele.widthbottom.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value + 10, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value + build_ele.HeightCenter.value + 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_3(self, build_ele, plus=0):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(plus, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(plus, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(plus, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(plus, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(plus, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(plus, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(plus + build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part3(self, build_ele, plus=0):
+        base_pol = geometry.p()
+        base_pol += geometry.point(plus, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(plus, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(plus, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(plus, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(plus, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(plus, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(plus + build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_4(self, build_ele, minus_1 = 0, minus_2 = 0, digit = -10):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - minus_2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - minus_2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value + digit - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
+    def top_part4(self, build_ele, minus_1 = 0, minus_2 = 0, digit = -10):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - minus_2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - minus_2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value + digit - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
         print(base_pol)
         print(path)
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_2_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value, build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value + 10, build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value + build_ele.HeightCenter.value + 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part2_2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value + 10, build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value + build_ele.HeightCenter.value + 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_2_3(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value - 10, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value + build_ele.HeightCenter.value - 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part2_3(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value - 10, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value + build_ele.HeightCenter.value - 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_4_2(self, build_ele, minus_1 = 0, minus_2 = 0, digit = -10):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - minus_2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value + (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - minus_2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - minus_1 + digit, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
+    def top_part4_2(self, build_ele, minus_1 = 0, minus_2 = 0, digit = -10):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - minus_2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value + (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - minus_2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - minus_1 + digit, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def top_part_addiction_3_3(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value, build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value - 10, build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value + build_ele.HeightCenter.value - 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part3_3(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value - 10, build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value + build_ele.HeightCenter.value - 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def last_top_part(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(0, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - build_ele.Identation.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthTop.value - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 - build_ele.Identation.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value + build_ele.HeightPlate.value)
-        base_pol += AllplanGeo.Point3D(0, - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 + build_ele.Identation.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value + build_ele.HeightPlate.value)
-        base_pol += AllplanGeo.Point3D(0, - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2 + build_ele.Identation.value, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
-        base_pol += AllplanGeo.Point3D(0, - (build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
-        base_pol += AllplanGeo.Point3D(0, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(0, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value, -(build_ele.WidthTop.value - build_ele.WidthBottom.value) / 2, build_ele.HeightBottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def top_part5(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(0, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(0, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        base_pol += geometry.point(0, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
+        base_pol += geometry.point(0, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - build_ele.Identation.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
+        base_pol += geometry.point(0, build_ele.widthTop.value - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 - build_ele.Identation.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value + build_ele.HeightPlate.value)
+        base_pol += geometry.point(0, - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 + build_ele.Identation.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value + build_ele.HeightPlate.value)
+        base_pol += geometry.point(0, - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2 + build_ele.Identation.value, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
+        base_pol += geometry.point(0, - (build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTop.value)
+        base_pol += geometry.point(0, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        path = geometry.line()
+        path += geometry.point(0, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        path += geometry.point(build_ele.length.value, -(build_ele.widthTop.value - build_ele.widthbottom.value) / 2, build_ele.Heightbottom.value + build_ele.HeightCenter.value + build_ele.HeightTopCut.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_1(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                    build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2,
-                                    build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 
-                                    build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2 - build_ele.WidthCentralLittle.value,
-                                    build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
+    def low_part1(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2,build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2 - build_ele.widthCentralLittle.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
     
-    def lower_part_addiction_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value - 10 , build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value - 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value - 10 , build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value - 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_3(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(0, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(0, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part3(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(0, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(0, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(0, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(0, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(0, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path = geometry.line()
+        path += geometry.point(0, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_4(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
+    def low_part4(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_2_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value, build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + build_ele.LengthTransition.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value,build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value,build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value - 10 ,build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value - 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part2_2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + build_ele.lengthTransition.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value,build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value,build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value - 10 ,build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value - 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_3_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part3_2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        path += geometry.point(build_ele.length.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_4_2(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
+    def low_part4_2(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_2_3(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value + 10, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value + 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part2_3(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value + 10, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value + 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_3_3(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.WidthBottom.value - build_ele.LengthBottomCut.value - 10, build_ele.HeightBottom.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part3_3(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.widthbottom.value - build_ele.lengthbottomCut.value - 10, build_ele.Heightbottom.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_2_4(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value, build_ele.LengthBottomCut.value + (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - build_ele.LengthTransition.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - 10, build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value - 10)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part2_4(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value, build_ele.lengthbottomCut.value + (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - build_ele.lengthTransition.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - 10, build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value - 10)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def lower_part_addiction_3_4(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value - (build_ele.WidthBottom.value - build_ele.LengthBottomCut.value * 2 - build_ele.WidthCentralLittle.value) / 2, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value, build_ele.HeightBottom.value)
-        path += AllplanGeo.Point3D(build_ele.Length.value - build_ele.LengthCenterWidth.value, build_ele.LengthBottomCut.value + 10, build_ele.HeightBottom.value)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+    def low_part3_4(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value - (build_ele.widthbottom.value - build_ele.lengthbottomCut.value * 2 - build_ele.widthCentralLittle.value) / 2, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path = geometry.line()
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value, build_ele.Heightbottom.value)
+        path += geometry.point(build_ele.length.value - build_ele.lengthcentrwidth.value, build_ele.lengthbottomCut.value + 10, build_ele.Heightbottom.value)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
 
-    def last_lower_part(self, build_ele):
-        base_pol = AllplanGeo.Polygon3D()
-        base_pol += AllplanGeo.Point3D(0, 20, 0)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value - 20, 0)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value, 20)
-        base_pol += AllplanGeo.Point3D(0, build_ele.WidthBottom.value, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(0, 0, build_ele.HeightBottom.value - build_ele.HeightBottomCut.value)
-        base_pol += AllplanGeo.Point3D(0, 0, 20)
-        base_pol += AllplanGeo.Point3D(0, 20, 0)
-
-        if not GeometryValidate.is_valid(base_pol):
+    def low_part5(self, build_ele):
+        base_pol = geometry.p()
+        base_pol += geometry.point(0, 20, 0)
+        base_pol += geometry.point(0, build_ele.widthbottom.value - 20, 0)
+        base_pol += geometry.point(0, build_ele.widthbottom.value, 20)
+        base_pol += geometry.point(0, build_ele.widthbottom.value, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(0, 0, build_ele.Heightbottom.value - build_ele.HeightbottomCut.value)
+        base_pol += geometry.point(0, 0, 20)
+        base_pol += geometry.point(0, 20, 0)
+        if not geometryValidate.is_valid(base_pol):
             return
-
-        path = AllplanGeo.Polyline3D()
-        path += AllplanGeo.Point3D(0, 20, 0)
-        path += AllplanGeo.Point3D(build_ele.Length.value,20,0)
-
-        err, polyhedron = AllplanGeo.CreatePolyhedron(base_pol, path)
-
-        
+        path = geometry.line()
+        path += geometry.point(0, 20, 0)
+        path += geometry.point(build_ele.length.value,20,0)
+        err, polyhedron = geometry.CreatePolyhedron(base_pol, path)
         if err:
             return []
-
         return polyhedron
-
